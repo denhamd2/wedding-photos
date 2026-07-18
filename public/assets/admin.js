@@ -45,11 +45,13 @@ async function renderGrid() {
   for (const p of photos) {
     const cell = document.createElement('div');
     cell.className = 'cell';
-    cell.innerHTML = p.isVideo
-      ? `<div class="video-badge"><div class="play-circle">▶</div></div>`
-      : p.thumb
-        ? `<img loading="lazy" src="${p.thumb}" alt="">`
-        : `<div class="file-badge">🖼️</div>`;
+    cell.innerHTML = p.isVideo && p.thumb
+      ? `<img loading="lazy" src="${p.thumb}" alt=""><div class="play-overlay"><div class="play-circle">▶</div></div>`
+      : p.isVideo
+        ? `<div class="video-badge"><div class="play-circle">▶</div></div>`
+        : p.thumb
+          ? `<img loading="lazy" src="${p.thumb}" alt="">`
+          : `<div class="file-badge">🖼️</div>`;
     if (p.name) cell.insertAdjacentHTML('beforeend', `<div class="tag">${p.name.replace(/-/g, ' ')}</div>`);
     const del = document.createElement('button');
     del.className = 'del';

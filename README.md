@@ -102,8 +102,14 @@ is still running.
   poster size. Raise `MAX_IMAGE_DIM` before the wedding if you want more.
 - HEIC/HEIF (iPhone originals) are decoded server-side, so every photo gets a
   proper thumbnail and a browser-viewable JPEG.
-- Videos upload fine (500MB cap) and play in the gallery lightbox; they show a
-  play tile instead of a thumbnail and are stored unmodified.
+- Videos upload fine (500MB cap). After upload they're **transcoded in the
+  background to 1080p H.264 MP4** (config `MAX_VIDEO_HEIGHT`, `VIDEO_CRF`) so
+  they play everywhere — crucially, iPhone HEVC `.mov` clips that otherwise
+  won't play in Chrome/Android — and a poster frame becomes the gallery tile.
+  The guest sees "done" instantly; conversion happens after, one at a time.
+  If the app restarts mid-transcode, a startup reconciler finishes the job.
+  Requires `ffmpeg` (installed in the Docker image; `FFMPEG_PATH`/`FFPROBE_PATH`
+  override the binaries if needed).
 - The gallery URL is unlisted but public — anyone with the link can view.
   Keep the link to wedding guests, or put the app behind a password if the
   guest list is nosy.

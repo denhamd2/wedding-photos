@@ -30,7 +30,10 @@ $('moreBtn').onclick = showMore;
 function cellFor(p) {
   const cell = document.createElement('button');
   cell.className = 'cell';
-  if (p.isVideo) {
+  if (p.isVideo && p.thumb) {
+    // poster frame with the play button on top (matches the mockup)
+    cell.innerHTML = `<img loading="lazy" src="${p.thumb}" alt=""><div class="play-overlay"><div class="play-circle">▶</div></div>`;
+  } else if (p.isVideo) {
     cell.innerHTML = `<div class="video-badge"><div class="play-circle">▶</div></div>`;
   } else if (p.thumb) {
     cell.innerHTML = `<img loading="lazy" src="${p.thumb}" alt="">`;

@@ -7,12 +7,15 @@ const express = require('express');
 const storageMod = require('./lib/storage');
 const { makeKey, parseKey, thumbKeyFor, extFor, sanitizeName, VIDEO_EXTS } = require('./lib/keys');
 const { processImage } = require('./lib/process');
+const { createVideoQueue } = require('./lib/videoqueue');
 
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   coupleNames: process.env.COUPLE_NAMES || 'John & Katie',
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '500', 10),
   maxImageDim: parseInt(process.env.MAX_IMAGE_DIM || '3840', 10),
+  maxVideoHeight: parseInt(process.env.MAX_VIDEO_HEIGHT || '1080', 10),
+  videoCrf: parseInt(process.env.VIDEO_CRF || '26', 10),
   adminPassword: process.env.ADMIN_PASSWORD || '',
   listCacheMs: parseInt(process.env.LIST_CACHE_MS || '20000', 10),
 };
@@ -37,6 +40,15 @@ function createApp(storage, cfg = config) {
   // ---- listing cache (the bucket is the database; avoid re-listing on every request)
   let listCache = { at: 0, photos: null };
   function invalidateListing() { listCache = { at: 0, photos: null }; }
+
+  // background video transcoding (HEVC .mov → H.264 mp4 + poster)
+  const videoQueue = createVideoQueue({
+    storage,
+    onListingChange: invalidateListing,
+    maxHeight: cfg.maxVideoHeight,
+    crf: cfg.videoCrf,
+  });
+  app.locals.videoQueue = videoQueue;
 
   async function listPhotos() {
     if (listCache.photos && Date.now() - listCache.at < cfg.listCacheMs) return listCache.photos;
@@ -95,7 +107,10 @@ function createApp(storage, cfg = config) {
         const key = makeKey(ext, uploader);
         await storage.putObject(key, req, contentType || 'application/octet-stream', declaredLen);
         invalidateListing();
-        return res.json({ ok: true, key });
+        res.json({ ok: true, key });
+        // guest already sees success; convert to compatible MP4 + poster in the background
+        videoQueue.enqueue(key);
+        return;
       }
 
       // image: buffer (bounded by the size check above), then compress
@@ -135,12 +150,30 @@ function createApp(storage, cfg = config) {
   app.get(/^\/img\/(photos|thumbs)\/(.+)$/, async (req, res) => {
     const key = `${req.params[0]}/${req.params[1]}`;
     if (key.includes('..')) return res.status(400).end();
+
+    // Parse a single-range "bytes=start-end" request (video seeking on iOS Safari).
+    let range;
+    const header = req.headers.range;
+    if (header) {
+      const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+      if (m && (m[1] || m[2])) {
+        const start = m[1] ? parseInt(m[1], 10) : 0;
+        const end = m[2] ? parseInt(m[2], 10) : Number.MAX_SAFE_INTEGER;
+        range = { start, end };
+      }
+    }
+
     try {
-      const { body, contentType, contentLength } = await storage.getObject(key);
-      res.set('Content-Type', contentType || 'application/octet-stream');
-      if (contentLength) res.set('Content-Length', String(contentLength));
+      const obj = await storage.getObject(key, range);
+      res.set('Content-Type', obj.contentType || 'application/octet-stream');
       res.set('Cache-Control', 'public, max-age=31536000, immutable');
-      body.pipe(res);
+      res.set('Accept-Ranges', 'bytes');
+      if (range && obj.range && obj.totalLength) {
+        res.status(206);
+        res.set('Content-Range', `bytes ${obj.range.start}-${obj.range.end}/${obj.totalLength}`);
+      }
+      if (obj.contentLength != null) res.set('Content-Length', String(obj.contentLength));
+      obj.body.pipe(res);
     } catch {
       res.status(404).end();
     }
@@ -202,6 +235,8 @@ if (require.main === module) {
   const app = createApp(storage, config);
   const server = app.listen(config.port, () => {
     console.log(`wedding-photos listening on :${config.port} (storage: ${storage.driver})`);
+    // pick up any videos left un-transcoded by a previous run
+    app.locals.videoQueue.reconcile();
   });
   // Node's 5s default is shorter than the platform edge proxy's idle timeout,
   // so the proxy reuses sockets we've already closed and the first request on
