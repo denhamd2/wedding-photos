@@ -42,7 +42,7 @@ async function renderGrid() {
       : p.thumb
         ? `<img loading="lazy" src="${p.thumb}" alt="">`
         : `<div class="file-badge">🖼️<span>photo</span></div>`;
-    cell.insertAdjacentHTML('beforeend', `<div class="tag">T${p.table}${p.name ? ' · ' + p.name.replace(/-/g, ' ') : ''}</div>`);
+    if (p.name) cell.insertAdjacentHTML('beforeend', `<div class="tag">${p.name.replace(/-/g, ' ')}</div>`);
     const del = document.createElement('button');
     del.className = 'del';
     del.textContent = '✕';

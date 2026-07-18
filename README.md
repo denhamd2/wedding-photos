@@ -1,22 +1,21 @@
 # John & Katie's Wedding Photo Wall 📸
 
 Guests scan the QR code on their table, tap one big button, and their photos
-upload straight from their phone — no app, no account, no sign-up. Everything
-lands in one shared gallery (tagged by table) and is **permanently stored** in
-Cloudflare R2, so nothing disappears after 12 months like the commercial
-services.
+upload straight from their phone — no app, no account, no sign-up. One shared
+QR code for the whole wedding; everything lands in one shared gallery and is
+**permanently stored** in Cloudflare R2, so nothing disappears after 12 months
+like the commercial services.
 
 ## How it works
 
-- Each table card's QR code opens `/t/<table-number>` — a mobile page with an
-  "Add your photos" button that opens the phone's own photo picker.
+- The QR code opens the app's front page — an "Add your photos" button that
+  opens the phone's own photo picker. Every table gets the same card.
 - Uploads go **directly from the guest's phone to the R2 bucket** via presigned
   URLs, so a burst of uploads during dinner never overloads the app server.
-- Object keys are the database: `photos/table-05/<timestamp>_<id>_<name>.jpg`.
+- Object keys are the database: `photos/<timestamp>_<id>_<name>.jpg`.
   No SQL, no migrations — the gallery is a bucket listing.
-- `/gallery` shows every photo, filterable by table, with a "Table 3 is in the
-  lead" counter. `/admin` (password-protected) can delete anything
-  inappropriate and download every original as one zip.
+- `/gallery` shows every photo, newest first. `/admin` (password-protected)
+  can delete anything inappropriate and download every original as one zip.
 
 ## One-time setup
 
@@ -63,7 +62,6 @@ services.
    | `R2_BUCKET` | `johnkatiewedding` |
    | `ADMIN_PASSWORD` | pick something strong |
    | `COUPLE_NAMES` | `John & Katie` (default) |
-   | `TABLE_COUNT` | number of tables, e.g. `14` |
    | `MAX_UPLOAD_MB` | optional, default `500` |
 
 3. Deploy, note the public URL, and put it in the R2 CORS rule above.
@@ -72,12 +70,13 @@ services.
 
 ```bash
 npm install
-npm run qr -- --tables 14 --url https://YOUR-APP.up.railway.app
+npm run qr -- --url https://YOUR-APP.up.railway.app --copies 14
 ```
 
-Open `out/table-cards.html` in a browser and print — one elegant A6 card per
-table, high-error-correction QR (survives a bit of spilled wine). Individual
-PNGs land in `out/` too if you'd rather design your own cards in Canva.
+Open `out/table-cards.html` in a browser and print — identical elegant A6
+cards (one per table), high-error-correction QR (survives a bit of spilled
+wine). `out/qr-code.png` is the bare code if you'd rather design your own
+cards in Canva.
 
 **Do a dress rehearsal:** print one card, scan it with a couple of different
 phones, upload a photo, check it appears in the gallery.

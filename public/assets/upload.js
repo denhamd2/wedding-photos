@@ -1,14 +1,12 @@
 'use strict';
 
-const table = parseInt(location.pathname.split('/').pop(), 10);
 const $ = (id) => document.getElementById(id);
 
-$('tableBadge').textContent = `Table ${table}`;
 $('uploaderName').value = localStorage.getItem('uploaderName') || '';
 
 fetch('/api/config').then((r) => r.json()).then((cfg) => {
   $('couple').textContent = `${cfg.coupleNames}'s Wedding`;
-  document.title = `${cfg.coupleNames}'s Wedding — Table ${table}`;
+  document.title = `${cfg.coupleNames}'s Wedding`;
 });
 
 $('pickBtn').addEventListener('click', () => $('fileInput').click());
@@ -40,7 +38,6 @@ async function uploadFiles(files) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        table,
         uploaderName,
         files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
       }),

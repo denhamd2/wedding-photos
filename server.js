@@ -5,13 +5,12 @@ const path = require('path');
 const express = require('express');
 
 const storageMod = require('./lib/storage');
-const { makeKey, parseKey, thumbKeyFor, extFor, sanitizeName, VIDEO_EXTS } = require('./lib/keys');
+const { makeKey, parseKey, thumbKeyFor, extFor, sanitizeName } = require('./lib/keys');
 const { generateThumb } = require('./lib/thumbs');
 
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   coupleNames: process.env.COUPLE_NAMES || 'John & Katie',
-  tableCount: parseInt(process.env.TABLE_COUNT || '20', 10),
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '500', 10),
   adminPassword: process.env.ADMIN_PASSWORD || '',
   listCacheMs: parseInt(process.env.LIST_CACHE_MS || '20000', 10),
@@ -38,7 +37,6 @@ function createApp(storage, cfg = config) {
       .filter((p) => p.key)
       .map((p) => ({
         key: p.key,
-        table: p.table,
         ts: p.ts,
         name: p.name,
         isVideo: p.isVideo,
@@ -51,34 +49,22 @@ function createApp(storage, cfg = config) {
     return photos;
   }
 
-  // ---- health & pages
+  // ---- health & pages: one QR for everyone, so the upload page IS the front page
   app.get('/healthz', (req, res) => res.json({ ok: true }));
-  app.get('/', (req, res) => res.redirect('/gallery'));
-
-  app.get('/t/:table', (req, res) => {
-    const table = parseInt(req.params.table, 10);
-    if (!Number.isInteger(table) || table < 1 || table > cfg.tableCount) {
-      return res.status(404).sendFile(path.join(__dirname, 'public', 'not-found.html'));
-    }
-    res.sendFile(path.join(__dirname, 'public', 'upload.html'));
-  });
-
+  app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'upload.html')));
+  app.get('/t/:table', (req, res) => res.redirect('/')); // old per-table links
   app.get('/gallery', (req, res) => res.sendFile(path.join(__dirname, 'public', 'gallery.html')));
   app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
   app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), { maxAge: '1h' }));
 
   app.get('/api/config', (req, res) => {
-    res.json({ coupleNames: cfg.coupleNames, tableCount: cfg.tableCount, maxUploadMb: cfg.maxUploadMb });
+    res.json({ coupleNames: cfg.coupleNames, maxUploadMb: cfg.maxUploadMb });
   });
 
   // ---- upload flow: presign → client PUTs to storage → confirm (thumbnails)
   app.post('/api/presign', async (req, res) => {
     try {
-      const { table, files, uploaderName } = req.body || {};
-      const t = parseInt(table, 10);
-      if (!Number.isInteger(t) || t < 1 || t > cfg.tableCount) {
-        return res.status(400).json({ error: 'Unknown table' });
-      }
+      const { files, uploaderName } = req.body || {};
       if (!Array.isArray(files) || files.length < 1 || files.length > 50) {
         return res.status(400).json({ error: 'Select between 1 and 50 files' });
       }
@@ -90,7 +76,7 @@ function createApp(storage, cfg = config) {
           return res.status(400).json({ error: `"${f.name}" is too large (max ${cfg.maxUploadMb}MB)` });
         }
         const contentType = f.type || 'application/octet-stream';
-        const key = makeKey(t, ext, sanitizeName(uploaderName));
+        const key = makeKey(ext, sanitizeName(uploaderName));
         const { url, headers } = await storage.presignPut(key, contentType);
         uploads.push({ key, url, headers, clientName: f.name });
       }
@@ -126,13 +112,8 @@ function createApp(storage, cfg = config) {
   // ---- gallery
   app.get('/api/photos', async (req, res) => {
     try {
-      const all = await listPhotos();
-      const table = req.query.table ? parseInt(req.query.table, 10) : null;
-      const photos = table ? all.filter((p) => p.table === table) : all;
-      const counts = {};
-      for (let i = 1; i <= cfg.tableCount; i++) counts[i] = 0;
-      for (const p of all) counts[p.table] = (counts[p.table] || 0) + 1;
-      res.json({ coupleNames: cfg.coupleNames, tableCount: cfg.tableCount, total: all.length, counts, photos });
+      const photos = await listPhotos();
+      res.json({ coupleNames: cfg.coupleNames, total: photos.length, photos });
     } catch (err) {
       console.error('listing failed:', err);
       res.status(500).json({ error: 'Could not load photos' });
@@ -208,7 +189,7 @@ if (require.main === module) {
   const storage = storageMod.create();
   const app = createApp(storage, config);
   app.listen(config.port, () => {
-    console.log(`wedding-photos listening on :${config.port} (storage: ${storage.driver}, tables: ${config.tableCount})`);
+    console.log(`wedding-photos listening on :${config.port} (storage: ${storage.driver})`);
   });
 }
 
