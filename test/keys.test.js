@@ -44,6 +44,9 @@ test('extFor prefers mime type, falls back to filename, rejects junk', () => {
   assert.equal(extFor('image/jpeg', 'x.bin'), 'jpg');
   assert.equal(extFor('video/quicktime', 'clip'), 'mov');
   assert.equal(extFor('', 'IMG_1234.HEIC'), 'heic');
+  assert.equal(extFor('video/x-msvideo', 'old-camcorder'), 'avi');
+  assert.equal(extFor('', 'clip.mkv'), 'mkv');
+  assert.equal(extFor('video/mpeg', ''), 'mpg');
   assert.equal(extFor('application/pdf', 'contract.pdf'), null);
   assert.equal(extFor('', 'malware.exe'), null);
 });

@@ -10,17 +10,20 @@ fetch('/api/config').then((r) => r.json()).then((cfg) => {
 });
 
 $('pickBtn').addEventListener('click', () => $('fileInput').click());
+$('cameraBtn').addEventListener('click', () => $('cameraInput').click());
 $('moreBtn').addEventListener('click', () => {
   $('thanks').style.display = 'none';
   $('uploadCard').style.display = 'block';
-  $('fileInput').click();
+  window.scrollTo({ top: 0 });
 });
 
-$('fileInput').addEventListener('change', () => {
-  const files = Array.from($('fileInput').files);
-  if (files.length) uploadFiles(files);
-  $('fileInput').value = '';
-});
+for (const inputId of ['fileInput', 'cameraInput']) {
+  $(inputId).addEventListener('change', () => {
+    const files = Array.from($(inputId).files);
+    if (files.length) uploadFiles(files);
+    $(inputId).value = '';
+  });
+}
 
 function showError(msg) {
   $('errorNote').textContent = msg;

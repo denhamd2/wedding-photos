@@ -51,7 +51,10 @@ test('API flow', async (t) => {
   await t.test('upload page is the front page; old table links redirect', async () => {
     const home = await fetch(`${base}/`);
     assert.equal(home.status, 200);
-    assert.match(await home.text(), /Add your photos/);
+    const html = await home.text();
+    assert.match(html, /Upload photos/);
+    assert.match(html, /Take a photo/);
+    assert.match(html, /capture="environment"/);
     const old = await fetch(`${base}/t/5`, { redirect: 'manual' });
     assert.equal(old.status, 302);
     assert.equal(old.headers.get('location'), '/');

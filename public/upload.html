@@ -18,8 +18,10 @@
       <label class="field-label" for="uploaderName">Your name <span style="opacity:.6">(optional)</span></label>
       <input type="text" id="uploaderName" placeholder="e.g. Auntie Sue" autocomplete="name" maxlength="30">
 
-      <button class="big-btn" id="pickBtn">📸 &nbsp;Add your photos</button>
+      <button class="big-btn" id="pickBtn">📤 &nbsp;Upload photos</button>
+      <button class="big-btn" id="cameraBtn">📸 &nbsp;Take a photo</button>
       <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
       <div class="hint">Photos and videos, straight from your phone.<br>No app, no sign-up.</div>
       <div class="error-note" id="errorNote"></div>
     </div>
