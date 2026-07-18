@@ -8,14 +8,17 @@ like the commercial services.
 
 ## How it works
 
-- The QR code opens the app's front page — an "Add your photos" button that
-  opens the phone's own photo picker. Every table gets the same card.
-- Uploads go **directly from the guest's phone to the R2 bucket** via presigned
-  URLs, so a burst of uploads during dinner never overloads the app server.
+- The QR code opens the app's front page — "Upload photos" opens the phone's
+  photo picker, "Take a photo" opens the camera. Every table gets the same card.
+- Uploads go through the app server (same origin — no bucket CORS setup
+  needed), which **compresses every image in-flight**: max 3840px (~4K) JPEG
+  plus a gallery thumbnail. The uploaded original is never stored, keeping the
+  bucket small. HEIC from iPhones is decoded server-side, so every photo gets
+  a thumbnail. Videos stream straight to the bucket unchanged.
 - Object keys are the database: `photos/<timestamp>_<id>_<name>.jpg`.
   No SQL, no migrations — the gallery is a bucket listing.
 - `/gallery` shows every photo, newest first. `/admin` (password-protected)
-  can delete anything inappropriate and download every original as one zip.
+  can delete anything inappropriate and download everything as one zip.
 
 ## One-time setup
 
@@ -33,19 +36,7 @@ like the commercial services.
    repo. (Tip: if you only saved the `cfat_…` token value, the S3 credentials
    are derivable — the Access Key ID is shown on the token's detail page, and
    the Secret Access Key is the SHA-256 hex of the token value.)
-3. On the bucket → **Settings → CORS policy**, add (replace the origin with
-   your real app URL once you have it):
-
-   ```json
-   [
-     {
-       "AllowedOrigins": ["https://YOUR-APP.up.railway.app"],
-       "AllowedMethods": ["PUT"],
-       "AllowedHeaders": ["Content-Type"],
-       "MaxAgeSeconds": 3600
-     }
-   ]
-   ```
+No CORS configuration is needed — uploads are proxied through the app itself.
 
 ### 2. Railway (the app server)
 
@@ -63,8 +54,9 @@ like the commercial services.
    | `ADMIN_PASSWORD` | pick something strong |
    | `COUPLE_NAMES` | `John & Katie` (default) |
    | `MAX_UPLOAD_MB` | optional, default `500` |
+   | `MAX_IMAGE_DIM` | optional, default `3840` (longest edge photos are resized to) |
 
-3. Deploy, note the public URL, and put it in the R2 CORS rule above.
+3. Deploy and note the public URL.
 
 ### 3. Print the table cards
 
@@ -105,11 +97,13 @@ is still running.
 
 ## Notes & limits
 
-- iPhones convert HEIC to JPEG on upload in almost all cases; if a rare
-  original HEIC arrives, it's stored safely but shows as a placeholder tile in
-  the gallery (the original is intact for the couple).
+- Photos are stored as size-capped (~4K) JPEGs, not the phone originals —
+  that's deliberate, to keep R2 storage small. 4K is plenty for prints up to
+  poster size. Raise `MAX_IMAGE_DIM` before the wedding if you want more.
+- HEIC/HEIF (iPhone originals) are decoded server-side, so every photo gets a
+  proper thumbnail and a browser-viewable JPEG.
 - Videos upload fine (500MB cap) and play in the gallery lightbox; they show a
-  🎬 tile instead of a thumbnail.
+  play tile instead of a thumbnail and are stored unmodified.
 - The gallery URL is unlisted but public — anyone with the link can view.
   Keep the link to wedding guests, or put the app behind a password if the
   guest list is nosy.

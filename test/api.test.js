@@ -5,15 +5,10 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const sharp = require('sharp');
 
 const { createApp } = require('../server');
 const { LocalDriver } = require('../lib/storage');
-
-// 1x1 red pixel PNG — enough for sharp to make a real thumbnail from.
-const TINY_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-  'base64',
-);
 
 function makeServer() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wedding-test-'));
@@ -25,21 +20,36 @@ function makeServer() {
     headObject: driver.headObject.bind(driver),
     deleteObject: driver.deleteObject.bind(driver),
     listAll: driver.listAll.bind(driver),
-    presignPut: driver.presignPut.bind(driver),
   };
   const app = createApp(storage, {
     coupleNames: 'John & Katie',
-    maxUploadMb: 5,
+    maxUploadMb: 50,
+    maxImageDim: 3840,
     adminPassword: 'secret123',
     listCacheMs: 0,
   });
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
-  return { server, base };
+  return { server, base, storage };
+}
+
+function upload(base, { filename, uploader = '', type, body }) {
+  return fetch(`${base}/api/upload?filename=${encodeURIComponent(filename)}&uploader=${encodeURIComponent(uploader)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': type },
+    body,
+  });
+}
+
+async function bufferOf(storage, key) {
+  const { body } = await storage.getObject(key);
+  const chunks = [];
+  for await (const c of body) chunks.push(c);
+  return Buffer.concat(chunks);
 }
 
 test('API flow', async (t) => {
-  const { server, base } = makeServer();
+  const { server, base, storage } = makeServer();
   t.after(() => server.close());
 
   await t.test('healthz and config', async () => {
@@ -60,72 +70,70 @@ test('API flow', async (t) => {
     assert.equal(old.headers.get('location'), '/');
   });
 
-  await t.test('presign validates type and size', async () => {
-    const presign = (body) => fetch(`${base}/api/presign`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    assert.equal((await presign({ files: [{ name: 'a.pdf', type: 'application/pdf', size: 100 }] })).status, 400);
-    assert.equal((await presign({ files: [{ name: 'a.jpg', type: 'image/jpeg', size: 99 * 1024 * 1024 }] })).status, 400);
-    assert.equal((await presign({ files: [] })).status, 400);
-    const ok = await presign({ files: [{ name: 'a.jpg', type: 'image/jpeg', size: 100 }], uploaderName: 'Dave' });
-    assert.equal(ok.status, 200);
-    const { uploads } = await ok.json();
-    assert.match(uploads[0].key, /^photos\/.*_Dave\.jpg$/);
+  await t.test('upload rejects unsupported types and oversized files', async () => {
+    const pdf = await upload(base, { filename: 'contract.pdf', type: 'application/pdf', body: Buffer.from('x') });
+    assert.equal(pdf.status, 400);
+    const big = await fetch(`${base}/api/upload?filename=huge.jpg`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/jpeg', 'Content-Length': String(200 * 1024 * 1024) },
+      body: Buffer.alloc(10),
+    }).catch(() => ({ status: 413 })); // node may abort early on mismatched length
+    assert.equal(big.status, 413);
   });
 
   let photoKey;
-  await t.test('full upload flow: presign → PUT → confirm → listed with thumb', async () => {
-    const res = await fetch(`${base}/api/presign`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uploaderName: 'Katie', files: [{ name: 'pic.png', type: 'image/png', size: TINY_PNG.length }] }),
-    });
-    const { uploads } = await res.json();
-    photoKey = uploads[0].key;
+  await t.test('image upload is re-encoded to JPEG with a thumbnail; original not stored', async () => {
+    const png = await sharp({ create: { width: 800, height: 600, channels: 3, background: '#b5924c' } }).png().toBuffer();
+    const res = await upload(base, { filename: 'pic.png', uploader: 'Katie', type: 'image/png', body: png });
+    assert.equal(res.status, 200);
+    ({ key: photoKey } = await res.json());
+    assert.match(photoKey, /^photos\/.*_Katie\.jpg$/);
 
-    const put = await fetch(`${base}${uploads[0].url}`, {
-      method: 'PUT',
-      headers: uploads[0].headers,
-      body: TINY_PNG,
-    });
-    assert.equal(put.status, 200);
+    const stored = await bufferOf(storage, photoKey);
+    const meta = await sharp(stored).metadata();
+    assert.equal(meta.format, 'jpeg');
+    assert.equal(meta.width, 800); // small image not enlarged
 
-    const confirm = await fetch(`${base}/api/confirm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: photoKey }),
-    });
-    const confirmBody = await confirm.json();
-    assert.equal(confirm.status, 200);
-    assert.equal(confirmBody.thumbed, true);
-
-    const { photos, total } = await (await fetch(`${base}/api/photos`)).json();
-    assert.ok(total >= 1);
+    const { photos } = await (await fetch(`${base}/api/photos`)).json();
     const mine = photos.find((p) => p.key === photoKey);
     assert.equal(mine.name, 'Katie');
-    assert.ok(mine.thumb.startsWith('/img/thumbs/'));
-
-    const img = await fetch(`${base}${mine.full}`);
-    assert.equal(img.status, 200);
-    assert.equal(img.headers.get('content-type'), 'image/png');
-    const thumb = await fetch(`${base}${mine.thumb}`);
-    assert.equal(thumb.status, 200);
-    assert.equal(thumb.headers.get('content-type'), 'image/webp');
+    assert.ok(mine.thumb.startsWith('/img/thumbs/'), 'thumbnail must exist for every photo');
+    assert.equal((await fetch(`${base}${mine.thumb}`)).headers.get('content-type'), 'image/webp');
+    assert.equal((await fetch(`${base}${mine.full}`)).headers.get('content-type'), 'image/jpeg');
   });
 
-  await t.test('confirm rejects unknown or malformed keys', async () => {
-    const confirm = (key) => fetch(`${base}/api/confirm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key }),
-    });
-    assert.equal((await confirm('photos/20260912T183000123_deadbeef.jpg')).status, 404);
-    assert.equal((await confirm('../../etc/passwd')).status, 400);
+  await t.test('oversized images are downscaled to the max dimension', async () => {
+    const wide = await sharp({ create: { width: 5000, height: 2000, channels: 3, background: '#333' } })
+      .jpeg().toBuffer();
+    const res = await upload(base, { filename: 'wide.jpg', type: 'image/jpeg', body: wide });
+    assert.equal(res.status, 200);
+    const { key } = await res.json();
+    const meta = await sharp(await bufferOf(storage, key)).metadata();
+    assert.equal(meta.width, 3840);
+    assert.ok(meta.height <= 3840);
   });
 
-  await t.test('admin: login required, wrong password rejected, delete works', async () => {
+  await t.test('videos stream through unchanged', async () => {
+    const fakeVideo = Buffer.from('not really mp4 but bytes are bytes');
+    const res = await upload(base, { filename: 'clip.mp4', uploader: 'Dave', type: 'video/mp4', body: fakeVideo });
+    assert.equal(res.status, 200);
+    const { key } = await res.json();
+    assert.match(key, /\.mp4$/);
+    assert.deepEqual(await bufferOf(storage, key), fakeVideo);
+    const { photos } = await (await fetch(`${base}/api/photos`)).json();
+    const mine = photos.find((p) => p.key === key);
+    assert.equal(mine.isVideo, true);
+    assert.equal(mine.thumb, null); // videos keep the play tile
+  });
+
+  await t.test('corrupt image bytes are rejected politely', async () => {
+    const res = await upload(base, { filename: 'broken.jpg', type: 'image/jpeg', body: Buffer.from('garbage') });
+    assert.equal(res.status, 500);
+    const { error } = await res.json();
+    assert.match(error, /could not read/i);
+  });
+
+  await t.test('admin: login required, wrong password rejected, delete removes full + thumb', async () => {
     const del = (key, cookie) => fetch(`${base}/api/admin/delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
@@ -151,5 +159,6 @@ test('API flow', async (t) => {
     assert.equal((await del(photoKey, cookie)).status, 200);
     const { photos } = await (await fetch(`${base}/api/photos`)).json();
     assert.equal(photos.find((p) => p.key === photoKey), undefined);
+    assert.equal((await storage.listAll('thumbs/')).length, 1); // only the wide.jpg thumb remains
   });
 });

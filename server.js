@@ -5,13 +5,14 @@ const path = require('path');
 const express = require('express');
 
 const storageMod = require('./lib/storage');
-const { makeKey, parseKey, thumbKeyFor, extFor, sanitizeName } = require('./lib/keys');
-const { generateThumb } = require('./lib/thumbs');
+const { makeKey, parseKey, thumbKeyFor, extFor, sanitizeName, VIDEO_EXTS } = require('./lib/keys');
+const { processImage } = require('./lib/process');
 
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   coupleNames: process.env.COUPLE_NAMES || 'John & Katie',
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '500', 10),
+  maxImageDim: parseInt(process.env.MAX_IMAGE_DIM || '3840', 10),
   adminPassword: process.env.ADMIN_PASSWORD || '',
   listCacheMs: parseInt(process.env.LIST_CACHE_MS || '20000', 10),
 };
@@ -61,52 +62,54 @@ function createApp(storage, cfg = config) {
     res.json({ coupleNames: cfg.coupleNames, maxUploadMb: cfg.maxUploadMb });
   });
 
-  // ---- upload flow: presign → client PUTs to storage → confirm (thumbnails)
-  app.post('/api/presign', async (req, res) => {
+  // ---- upload flow: one same-origin PUT per file (no bucket CORS involved).
+  // Images are re-encoded in-flight (max ~4K JPEG + thumb) and the original is
+  // never stored; videos stream straight through to the bucket unchanged.
+  app.put('/api/upload', async (req, res) => {
+    const filename = String(req.query.filename || '');
+    const uploader = sanitizeName(String(req.query.uploader || ''));
+    const contentType = (req.headers['content-type'] || '').split(';')[0];
+    const ext = extFor(contentType, filename);
+    if (!ext) {
+      req.resume();
+      return res.status(400).json({ error: `"${filename || 'this file'}" is not a photo or video we can accept` });
+    }
+    const declaredLen = parseInt(req.headers['content-length'] || '0', 10);
+    const maxBytes = cfg.maxUploadMb * 1024 * 1024;
+    if (!declaredLen || declaredLen > maxBytes) {
+      req.resume();
+      return res.status(413).json({ error: `File is too large (max ${cfg.maxUploadMb}MB)` });
+    }
+
     try {
-      const { files, uploaderName } = req.body || {};
-      if (!Array.isArray(files) || files.length < 1 || files.length > 50) {
-        return res.status(400).json({ error: 'Select between 1 and 50 files' });
+      if (VIDEO_EXTS.has(ext)) {
+        const key = makeKey(ext, uploader);
+        await storage.putObject(key, req, contentType || 'application/octet-stream', declaredLen);
+        invalidateListing();
+        return res.json({ ok: true, key });
       }
-      const uploads = [];
-      for (const f of files) {
-        const ext = extFor(f.type, f.name);
-        if (!ext) return res.status(400).json({ error: `"${f.name}" is not a photo or video we can accept` });
-        if (!Number.isFinite(f.size) || f.size <= 0 || f.size > cfg.maxUploadMb * 1024 * 1024) {
-          return res.status(400).json({ error: `"${f.name}" is too large (max ${cfg.maxUploadMb}MB)` });
-        }
-        const contentType = f.type || 'application/octet-stream';
-        const key = makeKey(ext, sanitizeName(uploaderName));
-        const { url, headers } = await storage.presignPut(key, contentType);
-        uploads.push({ key, url, headers, clientName: f.name });
+
+      // image: buffer (bounded by the size check above), then compress
+      const chunks = [];
+      let received = 0;
+      for await (const chunk of req) {
+        received += chunk.length;
+        if (received > maxBytes) throw Object.assign(new Error('too large'), { status: 413 });
+        chunks.push(chunk);
       }
-      res.json({ uploads });
+      const { full, thumb } = await processImage(Buffer.concat(chunks), ext, cfg.maxImageDim);
+      const key = makeKey('jpg', uploader);
+      await storage.putObject(key, full, 'image/jpeg');
+      await storage.putObject(thumbKeyFor(key), thumb, 'image/webp');
+      invalidateListing();
+      res.json({ ok: true, key });
     } catch (err) {
-      console.error('presign failed:', err);
-      res.status(500).json({ error: 'Could not prepare the upload. Please try again.' });
+      console.error('upload failed:', err.message);
+      const status = err.status || 500;
+      res.status(status).json({
+        error: status === 413 ? `File is too large (max ${cfg.maxUploadMb}MB)` : 'We could not read that photo — please try again.',
+      });
     }
-  });
-
-  // Dev-only stand-in for a presigned bucket PUT (local storage driver).
-  app.put('/api/dev-upload', express.raw({ type: () => true, limit: `${cfg.maxUploadMb}mb` }), async (req, res) => {
-    const key = String(req.query.key || '');
-    if (!parseKey(key)) return res.status(400).json({ error: 'bad key' });
-    await storage.putObject(key, req.body, req.headers['content-type']);
-    res.json({ ok: true });
-  });
-
-  app.post('/api/confirm', async (req, res) => {
-    const { key } = req.body || {};
-    const parsed = parseKey(String(key || ''));
-    if (!parsed) return res.status(400).json({ error: 'bad key' });
-    try {
-      await storage.headObject(parsed.key);
-    } catch {
-      return res.status(404).json({ error: 'upload not found' });
-    }
-    const result = await generateThumb(storage, parsed.key);
-    invalidateListing();
-    res.json({ ok: true, thumbed: result.thumbed });
   });
 
   // ---- gallery
@@ -163,7 +166,7 @@ function createApp(storage, cfg = config) {
     res.json({ ok: true });
   });
 
-  // Streams every original as an uncompressed zip (photos are already compressed).
+  // Streams every stored photo/video as an uncompressed zip (JPEGs are already compressed).
   app.get('/api/admin/download-all', async (req, res) => {
     if (!isAdmin(req)) return res.status(401).send('Not logged in');
     const archiver = require('archiver');

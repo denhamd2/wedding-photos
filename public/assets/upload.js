@@ -26,35 +26,20 @@ for (const inputId of ['fileInput', 'cameraInput']) {
   });
 }
 
-function showError(msg) {
-  $('errorNote').textContent = msg;
-  $('errorNote').style.display = 'block';
-}
-
 async function uploadFiles(files) {
   $('errorNote').style.display = 'none';
   const uploaderName = $('uploaderName').value.trim();
   if (uploaderName) localStorage.setItem('uploaderName', uploaderName);
 
-  let plan;
-  try {
-    const res = await fetch('/api/presign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        uploaderName,
-        files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
-      }),
-    });
-    plan = await res.json();
-    if (!res.ok) return showError(plan.error || 'Something went wrong — please try again.');
-  } catch {
-    return showError('No connection — please check your signal and try again.');
-  }
+  // One same-origin PUT per file — the server compresses and stores it.
+  const q = (file) => `/api/upload?filename=${encodeURIComponent(file.name)}&uploader=${encodeURIComponent(uploaderName)}`;
 
   $('uploadCard').style.display = 'none';
   $('progressCard').style.display = 'block';
-  const rows = files.map((file, i) => makeRow(file, plan.uploads[i]));
+  const rows = files.map((file) => makeRow(file, {
+    url: q(file),
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+  }));
   updateCount(rows);
 
   // Upload 3 at a time — phones on venue wifi don't love 30 parallel PUTs.
@@ -131,11 +116,6 @@ async function uploadOne(row, attemptsLeft, rows) {
   row.state.textContent = 'uploading…';
   try {
     await putWithProgress(row);
-    await fetch('/api/confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: row.upload.key }),
-    });
     row.bar.style.width = '100%';
     row.state.className = 'fstate ok';
     row.state.textContent = '✓';
