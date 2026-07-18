@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Wedding gallery</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div class="wrap wide">
+    <div class="hero">
+      <div class="rings">💍</div>
+      <h1 id="couple">&nbsp;</h1>
+      <div class="sub">Every photo our guests have shared</div>
+      <div class="topnav"><span style="color:var(--muted)">At the wedding? Scan the QR code on your table to add photos.</span></div>
+    </div>
+
+    <div class="chips" id="chips"></div>
+    <div class="leader" id="leader"></div>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" style="display:none">No photos yet — be the first! 📸</div>
+    <button class="big-btn secondary more-btn" id="moreBtn" style="display:none">Show more</button>
+  </div>
+
+  <div class="lightbox" id="lightbox">
+    <button class="close" id="lbClose">✕</button>
+    <div id="lbMedia"></div>
+    <div class="caption" id="lbCaption"></div>
+  </div>
+
+  <script src="/assets/gallery.js"></script>
+</body>
+</html>

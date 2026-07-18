@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Share your photos</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div class="rings">💍</div>
+      <h1 id="couple">&nbsp;</h1>
+      <div class="sub">Took a photo? Share it with us!</div>
+      <div class="table-badge" id="tableBadge"></div>
+    </div>
+
+    <div class="card" id="uploadCard">
+      <label class="field-label" for="uploaderName">Your name <span style="opacity:.6">(optional)</span></label>
+      <input type="text" id="uploaderName" placeholder="e.g. Auntie Sue" autocomplete="name" maxlength="30">
+
+      <button class="big-btn" id="pickBtn">📸 &nbsp;Add your photos</button>
+      <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
+      <div class="hint">Photos and videos, straight from your phone.<br>No app, no sign-up.</div>
+      <div class="error-note" id="errorNote"></div>
+    </div>
+
+    <div class="card" id="progressCard" style="display:none">
+      <div id="fileList"></div>
+    </div>
+
+    <div class="thanks" id="thanks">
+      <div class="heart">❤️</div>
+      <h2>Thank you!</h2>
+      <p>Your photos are safely saved for the happy couple.</p>
+      <a class="big-btn secondary" href="/gallery">See everyone's photos</a>
+      <button class="big-btn" id="moreBtn" style="margin-top:12px">Add more photos</button>
+    </div>
+  </div>
+
+  <script src="/assets/upload.js"></script>
+</body>
+</html>

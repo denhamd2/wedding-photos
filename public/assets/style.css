@@ -1,0 +1,184 @@
+:root {
+  --cream: #faf7f2;
+  --card: #ffffff;
+  --ink: #3b352e;
+  --muted: #8a8177;
+  --gold: #b08d57;
+  --gold-dark: #96754a;
+  --line: #e8e1d6;
+  --ok: #4a7c59;
+  --bad: #a94442;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+.wrap { max-width: 680px; margin: 0 auto; padding: 24px 16px 64px; }
+.wrap.wide { max-width: 1080px; }
+
+.hero { text-align: center; padding: 24px 0 8px; }
+.hero .rings { font-size: 34px; }
+.hero h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 500;
+  font-size: 34px;
+  letter-spacing: 0.5px;
+  margin-top: 6px;
+}
+.hero .sub {
+  color: var(--muted);
+  font-size: 17px;
+  margin-top: 8px;
+}
+.hero .table-badge {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 6px 18px;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  color: var(--gold-dark);
+  font-family: Georgia, serif;
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 20px;
+  box-shadow: 0 2px 10px rgba(59, 53, 46, 0.05);
+}
+
+label.field-label { display: block; font-size: 15px; color: var(--muted); margin-bottom: 6px; }
+input[type="text"], input[type="password"] {
+  width: 100%;
+  font-size: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--cream);
+  color: var(--ink);
+}
+input:focus { outline: 2px solid var(--gold); border-color: transparent; }
+
+.big-btn {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 16px;
+  background: var(--gold);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
+  padding: 22px;
+  margin-top: 18px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+}
+.big-btn:active { background: var(--gold-dark); }
+.big-btn.secondary { background: transparent; color: var(--gold-dark); border: 2px solid var(--gold); }
+.big-btn[disabled] { opacity: 0.5; }
+
+.hint { text-align: center; color: var(--muted); font-size: 14px; margin-top: 14px; }
+
+/* upload progress list */
+.file-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.file-row:last-child { border-bottom: 0; }
+.file-row .fname { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-row .fstate { font-size: 14px; color: var(--muted); white-space: nowrap; }
+.file-row .fstate.ok { color: var(--ok); }
+.file-row .fstate.err { color: var(--bad); cursor: pointer; text-decoration: underline; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 6px; }
+.bar > div { height: 100%; width: 0%; background: var(--gold); transition: width 0.2s; }
+
+.thanks { text-align: center; padding: 28px 0 10px; display: none; }
+.thanks .heart { font-size: 52px; }
+.thanks h2 { font-family: Georgia, serif; font-size: 26px; margin-top: 10px; font-weight: 500; }
+.thanks p { color: var(--muted); margin-top: 8px; font-size: 16px; }
+
+/* gallery */
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 16px 2px 6px; -webkit-overflow-scrolling: touch; }
+.chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.chip.active { background: var(--gold); border-color: var(--gold); color: #fff; }
+.chip .count { opacity: 0.7; font-size: 13px; }
+
+.leader { color: var(--muted); font-size: 14px; text-align: center; margin-top: 10px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 14px;
+}
+@media (min-width: 700px) { .grid { grid-template-columns: repeat(5, 1fr); } }
+.grid .cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--line);
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+}
+.grid .cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.grid .cell .video-badge, .grid .cell .file-badge {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 30px; color: var(--gold-dark);
+  background: linear-gradient(160deg, #f3ecdf, #e8dcc8);
+}
+.grid .cell .video-badge span, .grid .cell .file-badge span { font-size: 12px; margin-top: 4px; color: var(--muted); }
+.grid .cell .tag {
+  position: absolute; left: 6px; bottom: 6px;
+  background: rgba(59, 53, 46, 0.65); color: #fff;
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+}
+.grid .cell .del {
+  position: absolute; top: 6px; right: 6px;
+  background: rgba(169, 68, 66, 0.9); color: #fff; border: 0;
+  width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;
+}
+
+.more-btn { margin: 22px auto 0; display: block; width: auto; padding: 12px 32px; font-size: 16px; }
+.empty { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 16px; }
+
+/* lightbox */
+.lightbox {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(30, 27, 23, 0.94);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.lightbox.open { display: flex; }
+.lightbox img, .lightbox video { max-width: 100%; max-height: 82dvh; border-radius: 8px; }
+.lightbox .caption { color: #d9d2c7; font-size: 15px; margin-top: 14px; text-align: center; }
+.lightbox .close {
+  position: absolute; top: 16px; right: 16px;
+  background: rgba(255,255,255,0.15); color: #fff; border: 0;
+  width: 40px; height: 40px; border-radius: 50%; font-size: 18px; cursor: pointer;
+}
+
+.topnav { display: flex; justify-content: center; gap: 18px; margin-top: 8px; font-size: 15px; }
+.topnav a { color: var(--gold-dark); text-decoration: none; }
+
+.error-note { color: var(--bad); font-size: 15px; margin-top: 10px; text-align: center; display: none; }

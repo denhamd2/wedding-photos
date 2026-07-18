@@ -1,0 +1,63 @@
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+
+async function checkSession() {
+  const { admin } = await (await fetch('/api/admin/me')).json();
+  if (admin) enterAdmin();
+}
+
+$('loginBtn').onclick = async () => {
+  const res = await fetch('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: $('password').value }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    $('loginError').textContent = data.error || 'Login failed';
+    $('loginError').style.display = 'block';
+    return;
+  }
+  enterAdmin();
+};
+$('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
+
+async function enterAdmin() {
+  $('loginCard').style.display = 'none';
+  $('adminArea').style.display = 'block';
+  await renderGrid();
+}
+
+async function renderGrid() {
+  const { photos } = await (await fetch('/api/photos')).json();
+  const grid = $('grid');
+  grid.innerHTML = '';
+  $('empty').style.display = photos.length ? 'none' : 'block';
+  for (const p of photos) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.innerHTML = p.isVideo
+      ? `<div class="video-badge">🎬<span>video</span></div>`
+      : p.thumb
+        ? `<img loading="lazy" src="${p.thumb}" alt="">`
+        : `<div class="file-badge">🖼️<span>photo</span></div>`;
+    cell.insertAdjacentHTML('beforeend', `<div class="tag">T${p.table}${p.name ? ' · ' + p.name.replace(/-/g, ' ') : ''}</div>`);
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '✕';
+    del.onclick = async () => {
+      if (!confirm('Delete this photo permanently?')) return;
+      await fetch('/api/admin/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: p.key }),
+      });
+      renderGrid();
+    };
+    cell.appendChild(del);
+    grid.appendChild(cell);
+  }
+}
+
+checkSession();

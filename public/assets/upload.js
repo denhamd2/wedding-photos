@@ -1,0 +1,126 @@
+'use strict';
+
+const table = parseInt(location.pathname.split('/').pop(), 10);
+const $ = (id) => document.getElementById(id);
+
+$('tableBadge').textContent = `Table ${table}`;
+$('uploaderName').value = localStorage.getItem('uploaderName') || '';
+
+fetch('/api/config').then((r) => r.json()).then((cfg) => {
+  $('couple').textContent = `${cfg.coupleNames}'s Wedding`;
+  document.title = `${cfg.coupleNames}'s Wedding — Table ${table}`;
+});
+
+$('pickBtn').addEventListener('click', () => $('fileInput').click());
+$('moreBtn').addEventListener('click', () => {
+  $('thanks').style.display = 'none';
+  $('uploadCard').style.display = 'block';
+  $('fileInput').click();
+});
+
+$('fileInput').addEventListener('change', () => {
+  const files = Array.from($('fileInput').files);
+  if (files.length) uploadFiles(files);
+  $('fileInput').value = '';
+});
+
+function showError(msg) {
+  $('errorNote').textContent = msg;
+  $('errorNote').style.display = 'block';
+}
+
+async function uploadFiles(files) {
+  $('errorNote').style.display = 'none';
+  const uploaderName = $('uploaderName').value.trim();
+  if (uploaderName) localStorage.setItem('uploaderName', uploaderName);
+
+  let plan;
+  try {
+    const res = await fetch('/api/presign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        table,
+        uploaderName,
+        files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+      }),
+    });
+    plan = await res.json();
+    if (!res.ok) return showError(plan.error || 'Something went wrong — please try again.');
+  } catch {
+    return showError('No connection — please check your signal and try again.');
+  }
+
+  $('progressCard').style.display = 'block';
+  const rows = files.map((file, i) => makeRow(file, plan.uploads[i]));
+
+  // Upload 3 at a time — phones on venue wifi don't love 30 parallel PUTs.
+  const queue = rows.slice();
+  await Promise.all(Array.from({ length: 3 }, async () => {
+    while (queue.length) await uploadOne(queue.shift(), 2, rows);
+  }));
+  checkAllDone(rows);
+}
+
+function checkAllDone(rows) {
+  if (!rows.every((r) => r.done)) return;
+  $('uploadCard').style.display = 'none';
+  $('progressCard').style.display = 'none';
+  $('fileList').innerHTML = '';
+  $('thanks').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function makeRow(file, upload) {
+  const el = document.createElement('div');
+  el.className = 'file-row';
+  el.innerHTML = `
+    <div style="flex:1;min-width:0">
+      <div class="fname"></div>
+      <div class="bar"><div></div></div>
+    </div>
+    <div class="fstate">waiting…</div>`;
+  el.querySelector('.fname').textContent = file.name;
+  document.getElementById('fileList').appendChild(el);
+  return { file, upload, el, bar: el.querySelector('.bar > div'), state: el.querySelector('.fstate') };
+}
+
+function putWithProgress(row) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', row.upload.url);
+    for (const [k, v] of Object.entries(row.upload.headers || {})) xhr.setRequestHeader(k, v);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) row.bar.style.width = `${Math.round((e.loaded / e.total) * 100)}%`;
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)));
+    xhr.onerror = () => reject(new Error('network error'));
+    xhr.send(row.file);
+  });
+}
+
+async function uploadOne(row, attemptsLeft, rows) {
+  row.state.className = 'fstate';
+  row.state.textContent = 'uploading…';
+  try {
+    await putWithProgress(row);
+    await fetch('/api/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: row.upload.key }),
+    });
+    row.bar.style.width = '100%';
+    row.state.className = 'fstate ok';
+    row.state.textContent = '✓ done';
+    row.done = true;
+  } catch {
+    if (attemptsLeft > 1) return uploadOne(row, attemptsLeft - 1, rows);
+    row.state.className = 'fstate err';
+    row.state.textContent = 'failed — tap to retry';
+    row.state.onclick = async () => {
+      row.state.onclick = null;
+      await uploadOne(row, 2, rows);
+      checkAllDone(rows);
+    };
+  }
+}
