@@ -31,11 +31,11 @@ function cellFor(p) {
   const cell = document.createElement('button');
   cell.className = 'cell';
   if (p.isVideo) {
-    cell.innerHTML = `<div class="video-badge">🎬<span>video</span></div>`;
+    cell.innerHTML = `<div class="video-badge"><div class="play-circle">▶</div></div>`;
   } else if (p.thumb) {
     cell.innerHTML = `<img loading="lazy" src="${p.thumb}" alt="">`;
   } else {
-    cell.innerHTML = `<div class="file-badge">🖼️<span>photo</span></div>`;
+    cell.innerHTML = `<div class="file-badge">🖼️</div>`;
   }
   cell.onclick = () => openLightbox(p);
   return cell;
@@ -47,6 +47,7 @@ function openLightbox(p) {
     ? `<video src="${p.full}" controls autoplay playsinline></video>`
     : `<img src="${p.full}" alt="">`;
   $('lbCaption').textContent = p.name ? `by ${p.name.replace(/-/g, ' ')}` : '';
+  document.querySelector('.caption-heart').style.display = p.name ? 'block' : 'none';
   $('lightbox').classList.add('open');
 }
 

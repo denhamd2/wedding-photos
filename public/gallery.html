@@ -4,26 +4,32 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Wedding gallery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
+  <img class="art tr" src="/assets/art/corner-tr.png" alt="">
+
   <div class="wrap wide">
     <div class="hero">
-      <div class="rings">💍</div>
       <h1 id="couple">&nbsp;</h1>
+      <div class="heart-divider gold">♥</div>
       <div class="sub">Every photo our guests have shared</div>
       <div class="topnav"><a href="/">📸 Add your photos</a></div>
     </div>
 
-    <div class="grid" id="grid"></div>
+    <div class="masonry" id="grid"></div>
     <div class="empty" id="empty" style="display:none">No photos yet — be the first! 📸</div>
-    <button class="big-btn secondary more-btn" id="moreBtn" style="display:none">Show more</button>
+    <button class="big-btn secondary pill-btn" id="moreBtn" style="display:none">Show more ⌄</button>
   </div>
 
   <div class="lightbox" id="lightbox">
     <button class="close" id="lbClose">✕</button>
     <div id="lbMedia"></div>
     <div class="caption" id="lbCaption"></div>
+    <div class="caption-heart">— ♥ —</div>
   </div>
 
   <script src="/assets/gallery.js"></script>
