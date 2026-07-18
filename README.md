@@ -17,8 +17,13 @@ like the commercial services.
   a thumbnail. Videos stream straight to the bucket unchanged.
 - Object keys are the database: `photos/<timestamp>_<id>_<name>.jpg`.
   No SQL, no migrations — the gallery is a bucket listing.
-- `/gallery` shows every photo, newest first. `/admin` (password-protected)
-  can delete anything inappropriate and download everything as one zip.
+- `/gallery` shows every photo, newest first, and **updates itself live** —
+  it polls in the background and slides new guest uploads in at the top without
+  a reload (a "↑ new photos" pill appears if you're scrolled down). Polling is
+  cheap: the API returns an empty `304 Not Modified` via ETag when nothing has
+  changed, so many guests watching at once barely touch the server.
+  `/admin` (password-protected) can delete anything inappropriate and download
+  everything as one zip.
 
 ## One-time setup
 

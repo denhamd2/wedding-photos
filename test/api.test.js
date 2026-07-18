@@ -113,6 +113,25 @@ test('API flow', async (t) => {
     assert.ok(meta.height <= 3840);
   });
 
+  await t.test('photos listing supports ETag/304 for cheap live polling', async () => {
+    const first = await fetch(`${base}/api/photos`);
+    assert.equal(first.status, 200);
+    const etag = first.headers.get('etag');
+    assert.ok(etag, 'ETag header present');
+
+    // unchanged → 304 with no body
+    const again = await fetch(`${base}/api/photos`, { headers: { 'If-None-Match': etag } });
+    assert.equal(again.status, 304);
+    assert.equal(await again.text(), '');
+
+    // after a new upload the ETag changes and a full body returns
+    const png = await sharp({ create: { width: 40, height: 40, channels: 3, background: '#fff' } }).png().toBuffer();
+    await upload(base, { filename: 'new.png', type: 'image/png', body: png });
+    const changed = await fetch(`${base}/api/photos`, { headers: { 'If-None-Match': etag } });
+    assert.equal(changed.status, 200);
+    assert.notEqual(changed.headers.get('etag'), etag);
+  });
+
   await t.test('videos stream through unchanged', async () => {
     const fakeVideo = Buffer.from('not really mp4 but bytes are bytes');
     const res = await upload(base, { filename: 'clip.mp4', uploader: 'Dave', type: 'video/mp4', body: fakeVideo });
@@ -156,9 +175,11 @@ test('API flow', async (t) => {
     assert.equal(good.status, 200);
     const cookie = good.headers.get('set-cookie').split(';')[0];
 
+    const { thumbKeyFor } = require('../lib/keys');
+    assert.ok((await storage.listAll('thumbs/')).some((t) => t.key === thumbKeyFor(photoKey)), 'thumb exists before delete');
     assert.equal((await del(photoKey, cookie)).status, 200);
     const { photos } = await (await fetch(`${base}/api/photos`)).json();
     assert.equal(photos.find((p) => p.key === photoKey), undefined);
-    assert.equal((await storage.listAll('thumbs/')).length, 1); // only the wide.jpg thumb remains
+    assert.ok(!(await storage.listAll('thumbs/')).some((t) => t.key === thumbKeyFor(photoKey)), 'thumb removed with the photo');
   });
 });

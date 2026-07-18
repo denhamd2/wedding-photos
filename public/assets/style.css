@@ -191,6 +191,17 @@ body.thanked .thanks { padding-top: 130px; }
 }
 .empty { text-align: center; color: var(--muted); padding: 60px 20px 30px; font-size: 16px; }
 
+/* floats in when new guest photos arrive while you're scrolled down */
+.new-pill {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 40; border: 0; cursor: pointer;
+  background: var(--gold); color: #fff;
+  font-size: 15px; font-weight: 600; padding: 11px 22px; border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(47, 42, 34, 0.28);
+  animation: pill-in 0.25s ease;
+}
+@keyframes pill-in { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
 /* lightbox — dark warm-brown photo view */
 .lightbox {
   position: fixed; inset: 0; z-index: 50;

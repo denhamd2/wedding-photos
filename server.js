@@ -17,7 +17,7 @@ const config = {
   maxVideoHeight: parseInt(process.env.MAX_VIDEO_HEIGHT || '1080', 10),
   videoCrf: parseInt(process.env.VIDEO_CRF || '26', 10),
   adminPassword: process.env.ADMIN_PASSWORD || '',
-  listCacheMs: parseInt(process.env.LIST_CACHE_MS || '20000', 10),
+  listCacheMs: parseInt(process.env.LIST_CACHE_MS || '10000', 10),
 };
 
 function createApp(storage, cfg = config) {
@@ -136,10 +136,18 @@ function createApp(storage, cfg = config) {
     }
   });
 
-  // ---- gallery
+  // ---- gallery. The gallery page polls this to stay live; an ETag lets the
+  // common "nothing changed since last poll" case return an empty 304, so many
+  // guests polling at once cost almost nothing.
   app.get('/api/photos', async (req, res) => {
     try {
       const photos = await listPhotos();
+      // weak validator from what the gallery renders (keys + poster availability)
+      const sig = photos.map((p) => `${p.key}:${p.thumb ? 1 : 0}`).join('|');
+      const etag = `W/"${crypto.createHash('sha1').update(sig).digest('base64').slice(0, 24)}"`;
+      res.set('Cache-Control', 'no-cache');
+      res.set('ETag', etag);
+      if (req.headers['if-none-match'] === etag) return res.status(304).end();
       res.json({ coupleNames: cfg.coupleNames, total: photos.length, photos });
     } catch (err) {
       console.error('listing failed:', err);
