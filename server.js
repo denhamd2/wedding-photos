@@ -22,6 +22,15 @@ function createApp(storage, cfg = config) {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
 
+  // request log for API traffic so platform logs can answer "what failed?"
+  app.use('/api', (req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      console.log(`${req.method} ${req.originalUrl} → ${res.statusCode} in ${Date.now() - start}ms (${req.headers['content-length'] || 0} bytes in)`);
+    });
+    next();
+  });
+
   const adminSecret = crypto.createHmac('sha256', cfg.adminPassword || crypto.randomBytes(16).toString('hex'))
     .update('wedding-admin-session').digest('hex');
 
@@ -191,9 +200,15 @@ function createApp(storage, cfg = config) {
 if (require.main === module) {
   const storage = storageMod.create();
   const app = createApp(storage, config);
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     console.log(`wedding-photos listening on :${config.port} (storage: ${storage.driver})`);
   });
+  // Node's 5s default is shorter than the platform edge proxy's idle timeout,
+  // so the proxy reuses sockets we've already closed and the first request on
+  // one fails ("works on retry"). Keep sockets open longer than the proxy does.
+  server.keepAliveTimeout = 76_000;
+  server.headersTimeout = 77_000; // must exceed keepAliveTimeout
+  server.requestTimeout = 0; // large uploads on slow venue wifi can exceed the 5-min default
 }
 
 module.exports = { createApp, config };

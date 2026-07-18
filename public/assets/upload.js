@@ -45,7 +45,7 @@ async function uploadFiles(files) {
   // Upload 3 at a time — phones on venue wifi don't love 30 parallel PUTs.
   const queue = rows.slice();
   await Promise.all(Array.from({ length: 3 }, async () => {
-    while (queue.length) await uploadOne(queue.shift(), 2, rows);
+    while (queue.length) await uploadOne(queue.shift(), 4, rows);
   }));
   checkAllDone(rows);
 }
@@ -122,12 +122,16 @@ async function uploadOne(row, attemptsLeft, rows) {
     row.done = true;
     updateCount(rows);
   } catch {
-    if (attemptsLeft > 1) return uploadOne(row, attemptsLeft - 1, rows);
+    if (attemptsLeft > 1) {
+      // brief backoff so a dropped connection or app restart can recover
+      await new Promise((r) => setTimeout(r, 600 * (5 - attemptsLeft)));
+      return uploadOne(row, attemptsLeft - 1, rows);
+    }
     row.state.className = 'fstate err';
     row.state.textContent = 'failed — tap to retry';
     row.state.onclick = async () => {
       row.state.onclick = null;
-      await uploadOne(row, 2, rows);
+      await uploadOne(row, 4, rows);
       checkAllDone(rows);
     };
   }
