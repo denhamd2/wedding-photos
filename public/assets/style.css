@@ -144,6 +144,7 @@ body.thanked .thanks { padding-top: 130px; }
 .thanks h2 { font-size: 32px; margin-top: 6px; }
 .thanks p { color: var(--muted); margin-top: 12px; font-size: 16px; line-height: 1.55; }
 .thanks .btns { margin-top: 10px; }
+.thanks .dup-note { color: var(--gold-dark); font-size: 15px; margin-top: 10px; }
 
 /* gallery — 2-column masonry like the mockup */
 .masonry { columns: 2; column-gap: 10px; margin-top: 18px; }

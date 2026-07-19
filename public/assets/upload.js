@@ -28,6 +28,8 @@ for (const inputId of ['fileInput', 'cameraInput']) {
 
 async function uploadFiles(files) {
   $('errorNote').style.display = 'none';
+  $('dupNote').hidden = true; // clear any note from a previous batch
+  $('savedNote').hidden = false;
   const uploaderName = $('uploaderName').value.trim();
   if (uploaderName) localStorage.setItem('uploaderName', uploaderName);
 
@@ -59,6 +61,27 @@ function updateCount(rows) {
 function checkAllDone(rows) {
   updateCount(rows);
   if (!rows.every((r) => r.done)) return;
+
+  // tell the guest clearly if any of these were already in the gallery
+  const dup = rows.filter((r) => r.duplicate).length;
+  const fresh = rows.length - dup;
+  const savedNote = $('savedNote');
+  const dupNote = $('dupNote');
+  if (dup === 0) {
+    savedNote.hidden = false;
+    dupNote.hidden = true;
+  } else if (fresh > 0) {
+    savedNote.hidden = false;
+    dupNote.hidden = false;
+    dupNote.textContent = `${dup} of these ${dup === 1 ? 'was' : 'were'} already uploaded, so we skipped the duplicate${dup === 1 ? '' : 's'}.`;
+  } else {
+    savedNote.hidden = true;
+    dupNote.hidden = false;
+    dupNote.textContent = dup === 1
+      ? 'This photo was already uploaded — no need to add it again 💛'
+      : `These ${dup} photos were already uploaded — no need to add them again 💛`;
+  }
+
   $('progressCard').style.display = 'none';
   $('fileList').innerHTML = '';
   $('thanks').style.display = 'block';
@@ -122,7 +145,8 @@ async function uploadOne(row, attemptsLeft, rows) {
   try {
     const result = await putWithProgress(row);
     row.bar.style.width = '100%';
-    if (result && result.duplicate) {
+    row.duplicate = !!(result && result.duplicate);
+    if (row.duplicate) {
       row.state.className = 'fstate dup';
       row.state.textContent = 'already added';
     } else {
