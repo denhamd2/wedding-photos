@@ -85,7 +85,10 @@ test('video queue transcodes to mp4 + poster and removes the original', async (t
   await q.enqueue(key);
   // let the queue drain
   const outKey = videoOutputKey(key);
-  for (let i = 0; i < 60 && !(await storage.listAll('')).some((o) => o.key === outKey); i++) {
+  // wait for the whole job to finish — the original being deleted is the last
+  // step, so all artifacts (mp4 + poster) exist by then. Generous window since
+  // the suite runs in parallel and ffmpeg competes for CPU.
+  for (let i = 0; i < 300 && (await storage.listAll('photos/')).some((o) => o.key === key); i++) {
     await new Promise((r) => setTimeout(r, 100));
   }
 

@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev": "STORAGE_DRIVER=local node server.js",
     "qr": "node scripts/generate-qr.js",
-    "test": "node --test"
+    "test": "node --test --test-concurrency=1"
   },
   "engines": {
     "node": ">=20"

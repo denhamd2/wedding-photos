@@ -9,6 +9,7 @@ const storageMod = require('./lib/storage');
 const { makeKey, parseKey, thumbKeyFor, extFor, sanitizeName, VIDEO_EXTS } = require('./lib/keys');
 const { processImage } = require('./lib/process');
 const { createVideoQueue } = require('./lib/videoqueue');
+const { backfillDedupe } = require('./lib/backfill');
 
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
@@ -18,6 +19,7 @@ const config = {
   maxVideoHeight: parseInt(process.env.MAX_VIDEO_HEIGHT || '1080', 10),
   videoCrf: parseInt(process.env.VIDEO_CRF || '26', 10),
   dedupe: process.env.DEDUPE !== '0',
+  dedupeBackfill: process.env.DEDUPE_BACKFILL !== '0',
   adminPassword: process.env.ADMIN_PASSWORD || '',
   listCacheMs: parseInt(process.env.LIST_CACHE_MS || '10000', 10),
 };
@@ -70,6 +72,7 @@ function createApp(storage, cfg = config) {
     crf: cfg.videoCrf,
   });
   app.locals.videoQueue = videoQueue;
+  app.locals.invalidateListing = invalidateListing;
 
   async function listPhotos() {
     if (listCache.photos && Date.now() - listCache.at < cfg.listCacheMs) return listCache.photos;
@@ -155,13 +158,16 @@ function createApp(storage, cfg = config) {
         chunks.push(chunk);
       }
       const original = Buffer.concat(chunks);
-      const hash = crypto.createHash('sha256').update(original).digest('hex');
+      const { full, thumb } = await processImage(original, ext, cfg.maxImageDim);
+      // Fingerprint the processed JPEG we actually store (not the raw upload):
+      // sharp is deterministic, so identical originals produce identical stored
+      // bytes — and this is the same value the backfill computes from the bucket.
+      const hash = crypto.createHash('sha256').update(full).digest('hex');
       if (cfg.dedupe && await isDuplicate(hash)) {
         return res.json({ ok: true, duplicate: true });
       }
       if (cfg.dedupe) inflight.add(hash);
       try {
-        const { full, thumb } = await processImage(original, ext, cfg.maxImageDim);
         const key = makeKey('jpg', uploader);
         await storage.putObject(key, full, 'image/jpeg');
         await storage.putObject(thumbKeyFor(key), thumb, 'image/webp');
@@ -289,6 +295,11 @@ if (require.main === module) {
     console.log(`wedding-photos listening on :${config.port} (storage: ${storage.driver})`);
     // pick up any videos left un-transcoded by a previous run
     app.locals.videoQueue.reconcile();
+    // one-time: fingerprint photos uploaded before dedup, remove exact dupes
+    if (config.dedupe && config.dedupeBackfill) {
+      backfillDedupe({ storage, onChange: app.locals.invalidateListing })
+        .catch((err) => console.error('backfill failed:', err.message));
+    }
   });
   // Node's 5s default is shorter than the platform edge proxy's idle timeout,
   // so the proxy reuses sockets we've already closed and the first request on

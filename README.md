@@ -15,11 +15,15 @@ like the commercial services.
   plus a gallery thumbnail. The uploaded original is never stored, keeping the
   bucket small. HEIC from iPhones is decoded server-side, so every photo gets
   a thumbnail. Videos stream straight to the bucket unchanged.
-- **Exact duplicates are skipped:** the SHA-256 of each uploaded original is
-  recorded as a tiny `index/<hash>` marker in the bucket; if the same file is
-  uploaded again (a guest re-taps, or two guests share the same forwarded photo)
-  it's detected and not stored twice. Set `DEDUPE=0` to turn this off. (This is
-  byte-exact only — it won't catch re-encoded or visually-similar variants.)
+- **Exact duplicates are skipped:** each stored image is fingerprinted
+  (SHA-256 of the processed JPEG) and recorded as a tiny `index/<hash>` marker in
+  the bucket; if the same photo is uploaded again (a guest re-taps, or two guests
+  share the same forwarded photo) it's detected and not stored twice. On first
+  boot a one-time backfill fingerprints any photos uploaded before dedup existed
+  and removes pre-existing byte-identical duplicates (keeping the earliest),
+  gated by an `index/.backfilled` sentinel. Set `DEDUPE=0` (or `DEDUPE_BACKFILL=0`)
+  to disable. Byte-exact only — it won't catch re-encoded or visually-similar
+  variants.
 - Object keys are the database: `photos/<timestamp>_<id>_<name>.jpg`.
   No SQL, no migrations — the gallery is a bucket listing.
 - `/gallery` shows every photo, newest first, and **updates itself live** —
