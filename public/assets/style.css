@@ -127,6 +127,7 @@ input:focus { outline: 2px solid var(--gold); border-color: transparent; }
   display: flex; align-items: center; justify-content: center; font-size: 14px;
 }
 .file-row .fstate.err { color: var(--bad); cursor: pointer; text-decoration: underline; }
+.file-row .fstate.dup { color: var(--muted); font-size: 13px; }
 .bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 7px; }
 .bar > div { height: 100%; width: 0%; background: var(--gold); transition: width 0.2s; }
 .privacy-note {

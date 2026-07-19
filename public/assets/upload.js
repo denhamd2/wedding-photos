@@ -105,7 +105,12 @@ function putWithProgress(row) {
       row.bar.style.width = `${pct}%`;
       row.state.textContent = `${pct}%`;
     };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)));
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) return reject(new Error(`HTTP ${xhr.status}`));
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch { /* ignore */ }
+      resolve(body);
+    };
     xhr.onerror = () => reject(new Error('network error'));
     xhr.send(row.file);
   });
@@ -115,10 +120,15 @@ async function uploadOne(row, attemptsLeft, rows) {
   row.state.className = 'fstate';
   row.state.textContent = 'uploading…';
   try {
-    await putWithProgress(row);
+    const result = await putWithProgress(row);
     row.bar.style.width = '100%';
-    row.state.className = 'fstate ok';
-    row.state.textContent = '✓';
+    if (result && result.duplicate) {
+      row.state.className = 'fstate dup';
+      row.state.textContent = 'already added';
+    } else {
+      row.state.className = 'fstate ok';
+      row.state.textContent = '✓';
+    }
     row.done = true;
     updateCount(rows);
   } catch {

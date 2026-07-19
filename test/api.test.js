@@ -25,6 +25,7 @@ function makeServer() {
     coupleNames: 'John & Katie',
     maxUploadMb: 50,
     maxImageDim: 3840,
+    dedupe: true,
     adminPassword: 'secret123',
     listCacheMs: 0,
   });
@@ -111,6 +112,52 @@ test('API flow', async (t) => {
     const meta = await sharp(await bufferOf(storage, key)).metadata();
     assert.equal(meta.width, 3840);
     assert.ok(meta.height <= 3840);
+  });
+
+  await t.test('exact-duplicate images are skipped; different images are kept', async () => {
+    const img = await sharp({ create: { width: 300, height: 200, channels: 3, background: '#246' } }).jpeg().toBuffer();
+    const before = (await (await fetch(`${base}/api/photos`)).json()).total;
+
+    const first = await upload(base, { filename: 'dup.jpg', uploader: 'Ann', type: 'image/jpeg', body: img });
+    const firstBody = await first.json();
+    assert.equal(firstBody.duplicate, undefined);
+
+    // same bytes again (even different filename/uploader) → deduped, gallery unchanged
+    const second = await upload(base, { filename: 'copy.jpg', uploader: 'Ben', type: 'image/jpeg', body: img });
+    assert.deepEqual(await second.json(), { ok: true, duplicate: true });
+    const afterDup = (await (await fetch(`${base}/api/photos`)).json()).total;
+    assert.equal(afterDup, before + 1, 'only one copy stored');
+    assert.equal((await storage.listAll('index/')).length >= 1, true, 'hash marker written');
+
+    // a genuinely different image is still accepted
+    const other = await sharp({ create: { width: 300, height: 200, channels: 3, background: '#642' } }).jpeg().toBuffer();
+    await upload(base, { filename: 'other.jpg', type: 'image/jpeg', body: other });
+    const afterOther = (await (await fetch(`${base}/api/photos`)).json()).total;
+    assert.equal(afterOther, before + 2);
+  });
+
+  await t.test('concurrent identical images do not both store', async () => {
+    const img = await sharp({ create: { width: 120, height: 120, channels: 3, background: '#0a7' } }).png().toBuffer();
+    const before = (await (await fetch(`${base}/api/photos`)).json()).total;
+    const [a, b] = await Promise.all([
+      upload(base, { filename: 'race.png', type: 'image/png', body: img }),
+      upload(base, { filename: 'race.png', type: 'image/png', body: img }),
+    ]);
+    const bodies = [await a.json(), await b.json()];
+    assert.equal(bodies.filter((x) => x.duplicate).length, 1, 'exactly one deduped');
+    const after = (await (await fetch(`${base}/api/photos`)).json()).total;
+    assert.equal(after, before + 1, 'only one stored despite the race');
+  });
+
+  await t.test('duplicate videos are removed after upload', async () => {
+    const bytes = Buffer.from('pretend-video-bytes-that-are-identical');
+    const first = await upload(base, { filename: 'clip.mp4', type: 'video/mp4', body: bytes });
+    assert.equal((await first.json()).duplicate, undefined);
+    const second = await upload(base, { filename: 'clip2.mp4', type: 'video/mp4', body: bytes });
+    assert.equal((await second.json()).duplicate, true);
+    // exactly one video object stored for these bytes
+    const vids = (await storage.listAll('photos/')).filter((o) => o.key.endsWith('.mp4'));
+    assert.equal(vids.length, 1);
   });
 
   await t.test('photos listing supports ETag/304 for cheap live polling', async () => {

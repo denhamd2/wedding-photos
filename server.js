@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const path = require('path');
+const { Transform } = require('stream');
 const express = require('express');
 
 const storageMod = require('./lib/storage');
@@ -16,6 +17,7 @@ const config = {
   maxImageDim: parseInt(process.env.MAX_IMAGE_DIM || '3840', 10),
   maxVideoHeight: parseInt(process.env.MAX_VIDEO_HEIGHT || '1080', 10),
   videoCrf: parseInt(process.env.VIDEO_CRF || '26', 10),
+  dedupe: process.env.DEDUPE !== '0',
   adminPassword: process.env.ADMIN_PASSWORD || '',
   listCacheMs: parseInt(process.env.LIST_CACHE_MS || '10000', 10),
 };
@@ -40,6 +42,25 @@ function createApp(storage, cfg = config) {
   // ---- listing cache (the bucket is the database; avoid re-listing on every request)
   let listCache = { at: 0, photos: null };
   function invalidateListing() { listCache = { at: 0, photos: null }; }
+
+  // ---- exact-duplicate dedup. The bucket is the index: a marker object
+  // `index/<sha256-of-original>` records that a file's bytes were already seen.
+  // `inflight` guards against the same file double-tapped before its marker lands.
+  const inflight = new Set();
+  const indexKeyFor = (hash) => `index/${hash}`;
+
+  async function isDuplicate(hash) {
+    if (inflight.has(hash)) return true;
+    try {
+      await storage.headObject(indexKeyFor(hash));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async function markSeen(hash, photoKey) {
+    await storage.putObject(indexKeyFor(hash), Buffer.from(photoKey), 'text/plain');
+  }
 
   // background video transcoding (HEVC .mov → H.264 mp4 + poster)
   const videoQueue = createVideoQueue({
@@ -104,16 +125,28 @@ function createApp(storage, cfg = config) {
 
     try {
       if (VIDEO_EXTS.has(ext)) {
+        // hash the original bytes as they stream to storage (no buffering)
+        const hasher = crypto.createHash('sha256');
+        const tap = new Transform({
+          transform(chunk, _enc, cb) { hasher.update(chunk); cb(null, chunk); },
+        });
         const key = makeKey(ext, uploader);
-        await storage.putObject(key, req, contentType || 'application/octet-stream', declaredLen);
+        req.pipe(tap);
+        await storage.putObject(key, tap, contentType || 'application/octet-stream', declaredLen);
+        const hash = hasher.digest('hex');
+
+        if (cfg.dedupe && await isDuplicate(hash)) {
+          await storage.deleteObject(key).catch(() => {});
+          return res.json({ ok: true, duplicate: true });
+        }
+        if (cfg.dedupe) { inflight.add(hash); await markSeen(hash, key).finally(() => inflight.delete(hash)); }
         invalidateListing();
         res.json({ ok: true, key });
-        // guest already sees success; convert to compatible MP4 + poster in the background
-        videoQueue.enqueue(key);
+        videoQueue.enqueue(key); // convert to compatible MP4 + poster in the background
         return;
       }
 
-      // image: buffer (bounded by the size check above), then compress
+      // image: buffer (bounded by the size check above), then hash + compress
       const chunks = [];
       let received = 0;
       for await (const chunk of req) {
@@ -121,12 +154,23 @@ function createApp(storage, cfg = config) {
         if (received > maxBytes) throw Object.assign(new Error('too large'), { status: 413 });
         chunks.push(chunk);
       }
-      const { full, thumb } = await processImage(Buffer.concat(chunks), ext, cfg.maxImageDim);
-      const key = makeKey('jpg', uploader);
-      await storage.putObject(key, full, 'image/jpeg');
-      await storage.putObject(thumbKeyFor(key), thumb, 'image/webp');
-      invalidateListing();
-      res.json({ ok: true, key });
+      const original = Buffer.concat(chunks);
+      const hash = crypto.createHash('sha256').update(original).digest('hex');
+      if (cfg.dedupe && await isDuplicate(hash)) {
+        return res.json({ ok: true, duplicate: true });
+      }
+      if (cfg.dedupe) inflight.add(hash);
+      try {
+        const { full, thumb } = await processImage(original, ext, cfg.maxImageDim);
+        const key = makeKey('jpg', uploader);
+        await storage.putObject(key, full, 'image/jpeg');
+        await storage.putObject(thumbKeyFor(key), thumb, 'image/webp');
+        if (cfg.dedupe) await markSeen(hash, key);
+        invalidateListing();
+        res.json({ ok: true, key });
+      } finally {
+        inflight.delete(hash);
+      }
     } catch (err) {
       console.error('upload failed:', err.message);
       const status = err.status || 500;
