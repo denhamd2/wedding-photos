@@ -1,4 +1,4 @@
-# John & Katie's Wedding Photo Wall 📸
+# John & Kate's Wedding Photo Wall 📸
 
 Guests scan the QR code on their table, tap one big button, and their photos
 upload straight from their phone — no app, no account, no sign-up. One shared
@@ -66,7 +66,7 @@ No CORS configuration is needed — uploads are proxied through the app itself.
    | `R2_SECRET_ACCESS_KEY` | from the API token |
    | `R2_BUCKET` | `johnkatiewedding` |
    | `ADMIN_PASSWORD` | pick something strong |
-   | `COUPLE_NAMES` | `John & Katie` (default) |
+   | `COUPLE_NAMES` | `John & Kate` (default) |
    | `MAX_UPLOAD_MB` | optional, default `500` |
    | `MAX_IMAGE_DIM` | optional, default `3840` (longest edge photos are resized to) |
 

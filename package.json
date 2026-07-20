@@ -1,7 +1,7 @@
 {
   "name": "wedding-photos",
   "version": "1.0.0",
-  "description": "QR-code photo sharing for John & Katie's wedding — guests scan their table's code and upload photos, permanently stored in Cloudflare R2",
+  "description": "QR-code photo sharing for John & Kate's wedding — guests scan their table's code and upload photos, permanently stored in Cloudflare R2",
   "private": true,
   "main": "server.js",
   "scripts": {

@@ -1,7 +1,7 @@
 'use strict';
 
 // Generates printable QR table cards — one shared QR code for the whole wedding:
-//   npm run qr -- --url https://your-app.up.railway.app [--copies 12] [--couple "John & Katie"]
+//   npm run qr -- --url https://your-app.up.railway.app [--copies 12] [--couple "John & Kate"]
 // Output: out/table-cards.html (print this; one identical card per table) + out/qr-code.png
 
 const fs = require('fs/promises');
@@ -15,7 +15,7 @@ function arg(name, fallback) {
 
 const copies = parseInt(arg('copies', '12'), 10);
 const baseUrl = (arg('url', process.env.BASE_URL || '') || '').replace(/\/$/, '');
-const couple = arg('couple', process.env.COUPLE_NAMES || 'John & Katie');
+const couple = arg('couple', process.env.COUPLE_NAMES || 'John & Kate');
 
 if (!baseUrl) {
   console.error('Usage: npm run qr -- --url https://your-app.up.railway.app [--copies 12]');

@@ -22,7 +22,7 @@ function makeServer() {
     listAll: driver.listAll.bind(driver),
   };
   const app = createApp(storage, {
-    coupleNames: 'John & Katie',
+    coupleNames: 'John & Kate',
     maxUploadMb: 50,
     maxImageDim: 3840,
     dedupe: true,
@@ -56,7 +56,7 @@ test('API flow', async (t) => {
   await t.test('healthz and config', async () => {
     assert.equal((await fetch(`${base}/healthz`)).status, 200);
     const cfg = await (await fetch(`${base}/api/config`)).json();
-    assert.equal(cfg.coupleNames, 'John & Katie');
+    assert.equal(cfg.coupleNames, 'John & Kate');
   });
 
   await t.test('upload page is the front page; old table links redirect', async () => {

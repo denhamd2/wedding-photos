@@ -13,7 +13,7 @@ const { backfillDedupe } = require('./lib/backfill');
 
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
-  coupleNames: process.env.COUPLE_NAMES || 'John & Katie',
+  coupleNames: process.env.COUPLE_NAMES || 'John & Kate',
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '500', 10),
   maxImageDim: parseInt(process.env.MAX_IMAGE_DIM || '3840', 10),
   maxVideoHeight: parseInt(process.env.MAX_VIDEO_HEIGHT || '1080', 10),
